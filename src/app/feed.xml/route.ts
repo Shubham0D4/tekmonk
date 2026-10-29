@@ -1,0 +1,5 @@
+import { listPublishedPosts } from "@/lib/content";
+import { env, siteUrl } from "@/lib/env";
+
+const escape = (value:string) => value.replace(/[<>&'\"]/g, c => ({"<":"&lt;",">":"&gt;","&":"&amp;","'":"&apos;","\"":"&quot;"})[c] ?? c);
+export async function GET() { const {posts}=await listPublishedPosts({pageSize:20}).catch(()=>({posts:[]})); const items=posts.map(post=>`<item><title>${escape(post.title)}</title><link>${siteUrl(`/blog/${post.slug}`)}</link><guid>${siteUrl(`/blog/${post.slug}`)}</guid><description>${escape(post.excerpt||"")}</description><pubDate>${post.publishedAt?.toUTCString()||""}</pubDate></item>`).join(""); const xml=`<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>TekMonk</title><link>${siteUrl("/")}</link><description>Notes for thoughtful builders.</description><language>en</language>${items}</channel></rss>`; return new Response(xml,{headers:{"content-type":"application/rss+xml; charset=utf-8","cache-control":"s-maxage=3600, stale-while-revalidate=86400"}}); }

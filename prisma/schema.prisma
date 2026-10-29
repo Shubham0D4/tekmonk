@@ -1,0 +1,306 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  SUBSCRIBER
+}
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum MediaKind {
+  IMAGE
+}
+
+enum ContactStatus {
+  NEW
+  READ
+  REPLIED
+  SPAM
+}
+
+model User {
+  id                 String                @id
+  name               String
+  email              String                @unique
+  emailVerified      Boolean               @default(false)
+  image              String?
+  role               Role                  @default(SUBSCRIBER)
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  accounts           Account[]
+  sessions           Session[]
+  posts              Post[]                @relation("PostAuthor")
+  folders            Folder[]              @relation("FolderOwner")
+  media              MediaAsset[]          @relation("MediaOwner")
+  likes              PostLike[]
+  bookmarks          Bookmark[]
+  reads              ReadEvent[]
+  comments           Comment[]             @relation("CommentAuthor")
+  commentVotes       CommentVote[]
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+model Folder {
+  id        String   @id @default(cuid())
+  name      String
+  parentId  String?
+  ownerId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  parent    Folder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[] @relation("FolderTree")
+  owner     User     @relation("FolderOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  posts     Post[]
+  media     MediaAsset[]
+
+  @@unique([ownerId, parentId, name])
+  @@index([ownerId, parentId])
+}
+
+model Post {
+  id                String       @id @default(cuid())
+  title             String
+  slug              String       @unique
+  excerpt           String?
+  content           Json
+  contentVersion    Int          @default(1)
+  status            PostStatus   @default(DRAFT)
+  seoTitle          String?
+  seoDescription    String?
+  featuredImageId   String?
+  folderId          String?
+  authorId          String
+  publishedAt       DateTime?
+  scheduledFor      DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  author            User         @relation("PostAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  folder            Folder?      @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  featuredImage     MediaAsset?  @relation("FeaturedImage", fields: [featuredImageId], references: [id], onDelete: SetNull)
+  media             MediaAsset[] @relation("PostMedia")
+  tags              PostTag[]
+  categories        PostCategory[]
+  likes             PostLike[]
+  bookmarks         Bookmark[]
+  reads             ReadEvent[]
+  comments          Comment[]
+
+  @@index([status, publishedAt])
+  @@index([authorId, updatedAt])
+  @@index([folderId])
+}
+
+model Tag {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  slug      String    @unique
+  createdAt DateTime  @default(now())
+  posts     PostTag[]
+}
+
+model Category {
+  id          String         @id @default(cuid())
+  name        String         @unique
+  slug        String         @unique
+  description String?
+  createdAt   DateTime       @default(now())
+  posts       PostCategory[]
+}
+
+model PostTag {
+  postId String
+  tagId  String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+  @@index([tagId])
+}
+
+model PostCategory {
+  postId     String
+  categoryId String
+  post       Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([postId, categoryId])
+  @@index([categoryId])
+}
+
+model MediaAsset {
+  id          String      @id @default(cuid())
+  storagePath String      @unique
+  publicUrl   String
+  fileName    String
+  alt         String?
+  caption     String?
+  mimeType    String
+  sizeBytes   Int
+  width       Int?
+  height      Int?
+  kind        MediaKind   @default(IMAGE)
+  folderId    String?
+  postId      String?
+  ownerId     String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  folder      Folder?     @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  post        Post?       @relation("PostMedia", fields: [postId], references: [id], onDelete: SetNull)
+  owner       User        @relation("MediaOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  featuredFor Post[]      @relation("FeaturedImage")
+
+  @@index([folderId])
+  @@index([postId])
+  @@index([ownerId, createdAt])
+}
+
+model PostLike {
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
+  @@index([postId])
+}
+
+model Bookmark {
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
+  @@index([postId])
+}
+
+model ReadEvent {
+  id              String   @id @default(cuid())
+  userId          String
+  postId          String
+  durationSeconds Int      @default(0)
+  lastReadAt      DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post            Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([postId])
+}
+
+model Comment {
+  id              String        @id @default(cuid())
+  postId          String
+  authorId        String
+  parentId        String?
+  paragraphAnchor String?
+  body            String
+  isPinned        Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  post            Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author          User          @relation("CommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  parent          Comment?      @relation("CommentTree", fields: [parentId], references: [id], onDelete: Cascade)
+  replies         Comment[]     @relation("CommentTree")
+  votes           CommentVote[]
+
+  @@index([postId, createdAt])
+  @@index([parentId])
+}
+
+model CommentVote {
+  userId    String
+  commentId String
+  value     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@id([userId, commentId])
+  @@index([commentId, value])
+}
+
+model SiteSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+model ContactSubmission {
+  id        String        @id @default(cuid())
+  name      String
+  email     String
+  subject   String?
+  message   String
+  status    ContactStatus @default(NEW)
+  ipHash    String?
+  createdAt DateTime      @default(now())
+
+  @@index([status, createdAt])
+}
+
+model NewsletterSubscriber {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  confirmed Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

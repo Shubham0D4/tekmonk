@@ -1,0 +1,1 @@
+export default function Loading(){return <main className="shell animate-pulse py-14"><div className="h-4 w-24 rounded bg-zinc-200"/><div className="mt-5 h-16 max-w-2xl rounded bg-zinc-200"/><div className="mt-12 space-y-5">{[1,2,3].map(i=><div className="h-28 rounded bg-zinc-100" key={i}/>)}</div></main>}

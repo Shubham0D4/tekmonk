@@ -1,0 +1,4 @@
+import { SettingsForm } from "@/components/admin/settings-form";
+import { getPrisma } from "@/lib/prisma";
+export const dynamic="force-dynamic";
+export default async function SettingsPage(){const values=await getPrisma().siteSetting.findMany({where:{key:{in:["site_name","site_description"]}}});const get=(key:string,fallback:string)=>{const value=values.find(x=>x.key===key)?.value;return typeof value==="string"?value:fallback};return <><p className="eyebrow">Publication identity</p><h1 className="serif mt-2 text-4xl font-bold">Settings</h1><p className="mt-2 text-zinc-600">Set the basic words used across your publication. Credentials remain in environment variables.</p><SettingsForm siteName={get("site_name","TekMonk")} siteDescription={get("site_description","Notes for thoughtful builders.")}/></>}

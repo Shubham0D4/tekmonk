@@ -1,0 +1,10 @@
+import { z } from "zod";
+import { apiError, requireAdmin } from "@/lib/auth-guards";
+import { deleteImage, uploadImage } from "@/lib/storage";
+import { getPrisma } from "@/lib/prisma";
+
+export const dynamic = "force-dynamic";
+/** GET /api/admin/media?page=1 — paginated list of the admin's media assets. */
+export async function GET(request:Request){try{const admin=await requireAdmin();const pageSize=24;const page=Math.max(1,parseInt(new URL(request.url).searchParams.get("page")??"1",10)||1);const skip=(page-1)*pageSize;const prisma=getPrisma();const [media,total]=await Promise.all([prisma.mediaAsset.findMany({where:{ownerId:admin.id},orderBy:{createdAt:"desc"},skip,take:pageSize}),prisma.mediaAsset.count({where:{ownerId:admin.id}})]);return Response.json({media,total,page,pageSize});}catch(error){return apiError(error);}}
+export async function POST(request:Request){try{const admin=await requireAdmin();const form=await request.formData();const image=form.get("image");if(!(image instanceof File))return Response.json({error:"Choose an image to upload."},{status:422});const folderId=z.string().cuid().nullable().optional().parse(form.get("folderId")||null);const postId=z.string().cuid().nullable().optional().parse(form.get("postId")||null);const stored=await uploadImage(image,admin.id);const media=await getPrisma().mediaAsset.create({data:{...stored,fileName:image.name,mimeType:image.type,sizeBytes:image.size,folderId,postId,ownerId:admin.id,alt:typeof form.get("alt")==="string"?String(form.get("alt")).slice(0,250):null}});return Response.json({media},{status:201});}catch(error){return apiError(error);}}
+export async function DELETE(request:Request){try{const admin=await requireAdmin();const id=z.string().cuid().parse(new URL(request.url).searchParams.get("id"));const prisma=getPrisma();const media=await prisma.mediaAsset.findFirst({where:{id,ownerId:admin.id},select:{id:true,storagePath:true}});if(!media)return Response.json({error:"Media not found."},{status:404});await deleteImage(media.storagePath);await prisma.mediaAsset.delete({where:{id}});return Response.json({ok:true});}catch(error){return apiError(error);}}
